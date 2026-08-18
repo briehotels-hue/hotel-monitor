@@ -191,7 +191,97 @@ def action_for(a: HotelAlert) -> str:
     return "👁 FYI — monitor for developments"
 
 # ── SCRAPER: REALINSIGHT + TEN-X ──────────────────────────────────────────────
+def scrape_auction_# ── SCRAPER: REALINSIGHT + TEN-X ──────────────────────────────────────────────
 def scrape_auction_platforms() -> List[HotelAlert]:
+    alerts = []
+    log.info("Scraping RealINSIGHT Marketplace...")
+    urls = [
+        "https://rimarketplace.com/hotel",
+        "https://rimarketplace.com/auctions",
+    ]
+    for url in urls:
+        try:
+            resp = requests.get(url, headers=HEADERS, timeout=15)
+            if resp.status_code != 200:
+                log.warning(f"RealINSIGHT returned {resp.status_code}")
+            else:
+                soup = BeautifulSoup(resp.text, "html.parser")
+                cards = soup.find_all(
+                    ["div", "article", "li", "section"],
+                    class_=re.compile(r"property|listing|card|asset|result|item", re.I)
+                )
+                for card in cards[:40]:
+                    text = card.get_text(" ", strip=True)
+                    if not any(k in text.lower() for k in HOTEL_KEYWORDS):
+                        continue
+                    name_el = card.find(["h2", "h3", "h4", "a"])
+                    name = name_el.get_text(strip=True) if name_el else "Unknown Property"
+                    if len(name) < 5:
+                        continue
+                    price = parse_dollar(text)
+                    if price and price < MIN_LOAN_SIZE:
+                        continue
+                    location = extract_location(text)
+                    date_el = card.find(class_=re.compile(r"date|auction|end|close", re.I))
+                    auction_date = parse_date(date_el.get_text(strip=True)) if date_el else None
+                    link_el = card.find("a", href=True)
+                    link = link_el["href"] if link_el else url
+                    if link.startswith("/"):
+                        link = "https://rimarketplace.com" + link
+                    a = HotelAlert(
+                        name=name[:100], location=location,
+                        source="RealINSIGHT / JLL", url=link,
+                        description=text[:300], loan_size=price,
+                        auction_date=auction_date,
+                    )
+                    a.score = score_asset(a)
+                    a.action = action_for(a)
+                    alerts.append(a)
+        except Exception as e:
+            log.error(f"RealINSIGHT scrape error: {e}")
+        time.sleep(2)
+    auction_queries = [
+        "hotel auction RealINSIGHT JLL 2026",
+        "hotel foreclosure auction 2026",
+        "luxury hotel credit bid auction 2026",
+        "hotel stalking horse bid Chapter 11 2026",
+        "hotel trustee sale auction California Florida 2026",
+    ]
+    cutoff = datetime.now() - timedelta(days=3)
+    for query in auction_queries:
+        try:
+            encoded = requests.utils.quote(query)
+            rss = f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
+            feed = feedparser.parse(rss)
+            for entry in feed.entries[:6]:
+                if hasattr(entry, "published_parsed") and entry.published_parsed:
+                    if datetime(*entry.published_parsed[:6]) < cutoff:
+                        continue
+                title = entry.get("title", "")
+                summary = entry.get("summary", "")
+                link = entry.get("link", "")
+                combined = (title + " " + summary).lower()
+                if not any(k in combined for k in HOTEL_KEYWORDS):
+                    continue
+                if not any(k in combined for k in DISTRESS_KEYWORDS):
+                    continue
+                price = parse_dollar(combined)
+                if price and price < MIN_LOAN_SIZE:
+                    continue
+                a = HotelAlert(
+                    name=title[:100], location=extract_location(combined),
+                    source="Auction News", url=link,
+                    description=summary[:300], loan_size=price,
+                )
+                a.score = score_asset(a) + 1
+                a.action = action_for(a)
+                if not any(x.url == link for x in alerts):
+                    alerts.append(a)
+        except Exception as e:
+            log.error(f"Auction news RSS error: {e}")
+        time.sleep(1)
+    log.info(f"Auction platforms: {len(alerts)} alerts")
+    return alerts() -> List[HotelAlert]:
     alerts = []
     log.info("Scraping auction platforms (RealINSIGHT, Ten-X)...")
 
