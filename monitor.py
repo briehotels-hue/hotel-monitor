@@ -195,16 +195,12 @@ def scrape_auction_platforms() -> List[HotelAlert]:
     alerts = []
     log.info("Scraping auction platforms (RealINSIGHT, Ten-X)...")
 
-    platforms = [
-        ("RealINSIGHT / JLL", [
-            "https://www.realinsightmarketplace.com/properties?type=hotel",
-            "https://www.realinsightmarketplace.com/properties?type=hospitality",
-        ], "https://www.realinsightmarketplace.com"),
-        ("Ten-X", [
-            "https://www.ten-x.com/properties/?type=hospitality",
-            "https://www.ten-x.com/properties/?type=hotel",
-        ], "https://www.ten-x.com"),
-    ]
+  platforms = [
+    ("RealINSIGHT / JLL", [
+        "https://rimarketplace.com/hotel",
+        "https://rimarketplace.com/auctions",
+    ], "https://rimarketplace.com"),
+]
 
     for platform_name, urls, base_url in platforms:
         for url in urls:
